@@ -3,15 +3,35 @@ using UnityEngine;
 public class AllyAgent : SteeringAgent
 {
 	private Attack.AttackType attackType = Attack.AttackType.AllyGun;
+	private SteeringAgent nearestEnemy;
+
+	public static SteeringAgent SharedEnemyTarget { get; private set; }
+	public static float SharedTargetExpiryTime => sharedTargetExpiresAt;
+	private static float sharedTargetExpiresAt;
+
+	private const float SharedTargetDuration = 3.0f;
 
 	protected override void InitialiseFromAwake()
 	{
-		gameObject.AddComponent<SeekToMouse>();
+		gameObject.AddComponent<WanderBehaviour>();
+		gameObject.AddComponent<SeekToMouse>().enabled = false;
 	}
 
 	protected override void CooperativeArbitration(float deltaTime)
 	{
 		base.CooperativeArbitration(deltaTime);
+
+		nearestEnemy = GetNearestAgent(transform.position, GameData.Instance.enemies);
+		if (nearestEnemy != null)
+		{
+			float distanceToEnemy = (nearestEnemy.transform.position - transform.position).magnitude;
+			if (distanceToEnemy <= Attack.AllyGunData.range)
+			{
+				SharedEnemyTarget = nearestEnemy;
+				sharedTargetExpiresAt = Time.time + SharedTargetDuration;
+				AttackWith(Attack.AttackType.AllyGun);
+			}
+		}
 
 		if (Input.GetKeyDown(KeyCode.Alpha1))
 		{
@@ -42,22 +62,26 @@ public class AllyAgent : SteeringAgent
 		{
 			SteeringVelocity = Vector3.zero;
 			CurrentVelocity = Vector3.zero;
-			var seekToMouse = GetComponent<SeekToMouse>();
-			seekToMouse.enabled = !seekToMouse.enabled;
+			//var seekToMouse = GetComponent<SeekToMouse>();
+			//seekToMouse.enabled = !seekToMouse.enabled;
 		}
+
+
 	}
 
 	protected override void UpdateDirection()
 	{
-		if (GetComponent<SeekToMouse>().enabled)
+		base.UpdateDirection();
+
+		if (nearestEnemy == null)
 		{
-			base.UpdateDirection();
+			return;
 		}
-		else
+
+		Vector3 difference = nearestEnemy.transform.position - transform.position;
+		if (difference.sqrMagnitude <= Attack.AllyGunData.range * Attack.AllyGunData.range)
 		{
-			var mouseInWorld = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-			mouseInWorld.z = 0.0f;
-			transform.up = Vector3.Normalize(mouseInWorld - transform.position);
+			transform.up = Vector3.Normalize(new Vector3(difference.x, difference.y, 0.0f));
 		}
 	}
 }
